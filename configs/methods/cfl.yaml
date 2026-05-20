@@ -1,0 +1,21 @@
+method:
+  name: cfl
+
+  # CFL 不需要预设 K
+  warmup_rounds: 5
+
+  # split condition:
+  # if mean_update_norm < eps_1 and max_update_norm > eps_2
+  eps_1: 0.4
+  eps_2: 1.6
+
+  clustering_interval: 1
+  min_cluster_size: 4
+  min_split_round: 6
+
+  similarity: cosine_update
+  linkage: complete
+
+  # parent: split 后两个子簇都从父簇模型开始
+  # probe_avg: split 后用 probe update 初始化子簇模型，更激进
+  split_center_init: parent
