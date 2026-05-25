@@ -1,474 +1,384 @@
-from __future__ import annotations
+"""CFL / clustered federated learning baseline."""
 
-import copy
-import math
-import time
-from typing import Dict, List, Tuple
+from __future__ import annotations
 
 import numpy as np
 import torch
 from sklearn.cluster import AgglomerativeClustering
 
-from flbench.methods.base import BaseMethod
+from flbench.core.evaluation import evaluate_cluster_models, evaluate_global_model
+from flbench.core.sampling import sample_client_ids
+from flbench.methods.base import BaseRunner
+from flbench.utils.state_dict import (
+    StateDict,
+    apply_delta,
+    clone_state,
+    flatten_delta,
+    weighted_average_deltas,
+)
 
 
-StateDict = Dict[str, torch.Tensor]
+def _delta_norm(delta: StateDict) -> float:
+    return float(torch.norm(flatten_delta(delta)).item())
 
 
-def _clone_state(state: StateDict) -> StateDict:
-    return {k: v.detach().clone() for k, v in state.items()}
-
-def _weighted_average(states: List[StateDict], weights: List[int]) -> StateDict:
-    """
-    Sample-weighted FedAvg for model state_dicts.
-    Floating tensors are weighted averaged.
-    Non-floating buffers are copied from the first client.
-    """
-    if len(states) == 0:
-        raise ValueError("Cannot average empty state list.")
-
-    if len(states) != len(weights):
-        raise ValueError("states and weights must have the same length.")
-
-    total_weight = float(sum(weights))
-    if total_weight <= 0:
-        raise ValueError("Total aggregation weight must be positive.")
-
-    avg_state: StateDict = {}
-
-    for key in states[0].keys():
-        first_tensor = states[0][key].detach().cpu()
-
-        if torch.is_floating_point(first_tensor):
-            acc = torch.zeros_like(first_tensor, dtype=torch.float32)
-
-            for state, weight in zip(states, weights):
-                tensor = state[key].detach().cpu().float()
-                acc += tensor * (float(weight) / total_weight)
-
-            avg_state[key] = acc.to(dtype=first_tensor.dtype)
-        else:
-            avg_state[key] = first_tensor.clone()
-
-    return avg_state
-
-def _state_delta(new_state: StateDict, old_state: StateDict) -> StateDict:
-    return {
-        k: (new_state[k].detach().cpu() - old_state[k].detach().cpu())
-        for k in old_state.keys()
-    }
-
-
-def _add_delta(base_state: StateDict, delta: StateDict) -> StateDict:
-    return {
-        k: (base_state[k].detach().cpu() + delta[k].detach().cpu())
-        for k in base_state.keys()
-    }
-
-
-def _flatten_delta(delta: StateDict) -> torch.Tensor:
-    return torch.cat([v.reshape(-1).float().cpu() for v in delta.values()])
-
-
-def _mean_delta(deltas: List[StateDict]) -> StateDict:
-    if len(deltas) == 0:
-        raise ValueError("Cannot average an empty delta list.")
-
-    out = {}
-    for k in deltas[0].keys():
-        out[k] = torch.stack([d[k].float().cpu() for d in deltas], dim=0).mean(dim=0)
-    return out
-
-
-def _cosine_similarity_matrix(deltas: List[StateDict]) -> np.ndarray:
-    vecs = [_flatten_delta(d) for d in deltas]
+def _cosine_similarity_matrix(deltas: list[StateDict]) -> np.ndarray:
+    vecs = [flatten_delta(delta) for delta in deltas]
     n = len(vecs)
     sim = np.eye(n, dtype=np.float64)
 
     for i in range(n):
+        vi = vecs[i]
+        ni = torch.norm(vi)
         for j in range(i + 1, n):
-            denom = torch.norm(vecs[i]) * torch.norm(vecs[j]) + 1e-12
-            value = torch.sum(vecs[i] * vecs[j]) / denom
-            value = float(value.item())
+            vj = vecs[j]
+            denom = ni * torch.norm(vj)
+            if float(denom.item()) <= 1e-12:
+                value = 0.0
+            else:
+                value = float(torch.sum(vi * vj).div(denom).item())
             sim[i, j] = value
             sim[j, i] = value
 
     return sim
 
 
-def _update_norm(delta: StateDict) -> float:
-    return float(torch.norm(_flatten_delta(delta)).item())
+def _binary_agglomerative_from_cosine(
+    deltas: list[StateDict],
+    linkage: str = "complete",
+) -> np.ndarray:
+    sim = _cosine_similarity_matrix(deltas)
+    distance = np.clip(1.0 - sim, 0.0, 2.0)
+    np.fill_diagonal(distance, 0.0)
 
-
-def _fit_binary_agglomerative(distance: np.ndarray) -> np.ndarray:
-    """
-    sklearn changed `affinity` to `metric` in newer versions.
-    This helper supports both.
-    """
     try:
         model = AgglomerativeClustering(
             n_clusters=2,
             metric="precomputed",
-            linkage="complete",
+            linkage=linkage,
         )
     except TypeError:
         model = AgglomerativeClustering(
             n_clusters=2,
             affinity="precomputed",
-            linkage="complete",
+            linkage=linkage,
         )
 
     return model.fit_predict(distance)
 
 
-class CFLRunner(BaseMethod):
-    """
-    Clustered Federated Learning baseline.
-
-    This implementation intentionally keeps CARES out of the repo.
-    It is a baseline-only method compatible with the same protocol/split/model
-    used by CARES and FeSEM.
-    """
+class CFLRunner(BaseRunner):
+    """Clustered Federated Learning with recursive update-similarity splits."""
 
     name = "cfl"
 
-    def __init__(self, clients, model_fn, cfg, logger):
-        super().__init__(clients, model_fn, cfg, logger)
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
-        self.cfg = cfg
-        self.clients = clients
-        self.model_fn = model_fn
-        self.logger = logger
-
-        self.method_cfg = cfg.method
-        self.train_cfg = cfg.train
-
-        self.total_rounds = int(cfg.train.total_rounds)
-        self.warmup_rounds = int(
-            getattr(self.method_cfg, "warmup_rounds", getattr(cfg.train, "warmup_rounds", 0))
-        )
-
-        self.eps_1 = float(getattr(self.method_cfg, "eps_1", 0.4))
-        self.eps_2 = float(getattr(self.method_cfg, "eps_2", 1.6))
-        self.clustering_interval = int(getattr(self.method_cfg, "clustering_interval", 1))
-        self.min_cluster_size = int(getattr(self.method_cfg, "min_cluster_size", 4))
-        self.min_split_round = int(getattr(self.method_cfg, "min_split_round", self.warmup_rounds + 1))
-        self.split_center_init = str(getattr(self.method_cfg, "split_center_init", "parent"))
-
-        self.seed = int(getattr(cfg.runtime, "seed", 42))
-        self.device = torch.device(getattr(cfg.runtime, "device", "cuda" if torch.cuda.is_available() else "cpu"))
-
-        # cluster_id -> list[client_id]
-        self.clusters: Dict[int, List[int]] = {
-            0: [client.client_id for client in self.clients]
-        }
-
-        # cluster_id -> model state
-        self.cluster_states: Dict[int, StateDict] = {}
+        self.clusters: dict[int, list[int]] = {0: list(range(self.num_clients))}
+        self.center_states: dict[int, StateDict] = {}
 
         self.next_cluster_id = 1
-
-        # accounting
-        self.model_downloads = 0
-        self.model_uploads = 0
+        self.cluster_split_events = 0
         self.split_probe_downloads = 0
         self.split_probe_uploads = 0
-        self.cluster_split_events = 0
 
-    # ---------------------------------------------------------------------
-    # Basic helpers
-    # ---------------------------------------------------------------------
-
-    def _new_model_state(self) -> StateDict:
-        model = self.model_fn().to(self.device)
-        return _clone_state(model.state_dict())
-
-    def _client_by_id(self, client_id: int):
-        return self.clients[int(client_id)]
-
-    def _sample_client_ids(self, client_ids: List[int], round_idx: int, cluster_id: int) -> List[int]:
-        if len(client_ids) == 0:
-            return []
-
-        frac = float(self.train_cfg.client_frac)
-        n_selected = max(1, int(math.ceil(len(client_ids) * frac)))
-
-        rng = np.random.default_rng(self.seed + round_idx * 1009 + cluster_id * 9173)
-        selected = rng.choice(client_ids, size=min(n_selected, len(client_ids)), replace=False)
-        return [int(x) for x in selected.tolist()]
-
-    def _train_clients_from_state(
-        self,
-        client_ids: List[int],
-        base_state: StateDict,
-    ) -> Tuple[List[StateDict], List[int], List[StateDict]]:
-        updated_states = []
-        weights = []
-        deltas = []
-
-        for client_id in client_ids:
-            client = self._client_by_id(client_id)
-
-            new_state, num_samples = client.train(
-                model_state=base_state,
-                epochs=int(self.train_cfg.local_epochs),
-                lr=float(self.train_cfg.lr),
+    def run(self) -> dict:
+        total_rounds = int(self.cfg.train.total_rounds)
+        warmup_rounds = int(
+            self.cfg.method.get(
+                "warmup_rounds",
+                self.cfg.train.get("warmup_rounds", 0),
             )
+        )
+        warmup_rounds = min(max(warmup_rounds, 0), total_rounds)
+        eval_every = int(self.cfg.eval.get("eval_every", 1))
 
-            updated_states.append(new_state)
-            weights.append(int(num_samples))
-            deltas.append(_state_delta(new_state, base_state))
+        global_state = self.init_model_state()
 
-        return updated_states, weights, deltas
+        for r in range(1, warmup_rounds + 1):
+            selected = sample_client_ids(
+                self.num_clients,
+                float(self.cfg.train.client_frac),
+                self.rng,
+            )
+            global_state = self._fedavg_step(global_state, selected)
 
-    # ---------------------------------------------------------------------
-    # Warmup
-    # ---------------------------------------------------------------------
+            if r % eval_every == 0 or r == warmup_rounds:
+                metrics = evaluate_global_model(
+                    clients=self.clients,
+                    model_state=global_state,
+                    model_fn=self.model_fn,
+                    num_classes=self.num_classes,
+                    split=str(self.cfg.eval.get("test_split", "test")),
+                )
+                self.log_metrics(
+                    r,
+                    "warmup",
+                    metrics,
+                    extra={
+                        "k_config": None,
+                        "num_selected_clients": len(selected),
+                        "cluster_sizes": [self.num_clients],
+                        "num_empty_clusters": 0,
+                        "cluster_split_events": self.cluster_split_events,
+                        "split_probe_downloads": self.split_probe_downloads,
+                        "split_probe_uploads": self.split_probe_uploads,
+                        "eps_1": float(self.cfg.method.get("eps_1", 0.4)),
+                        "eps_2": float(self.cfg.method.get("eps_2", 1.6)),
+                    },
+                )
 
-    def _fedavg_warmup(self):
-        global_state = self._new_model_state()
+        self.center_states = {0: clone_state(global_state)}
+        self.clusters = {0: list(range(self.num_clients))}
 
-        for round_idx in range(1, self.warmup_rounds + 1):
-            all_client_ids = [client.client_id for client in self.clients]
-            selected_ids = self._sample_client_ids(all_client_ids, round_idx, cluster_id=0)
+        if warmup_rounds == total_rounds:
+            return self.save_and_summarize()
 
-            updated_states, weights, _ = self._train_clients_from_state(selected_ids, global_state)
+        for r in range(warmup_rounds + 1, total_rounds + 1):
+            if self._should_try_split(r, warmup_rounds):
+                self._maybe_split_all_clusters(r)
 
-            self.model_downloads += len(selected_ids)
-            self.model_uploads += len(selected_ids)
+            selected = sample_client_ids(
+                self.num_clients,
+                float(self.cfg.train.client_frac),
+                self.rng,
+            )
+            selected_by_cluster = self._group_selected_clients(selected)
+            updated_clusters = self._cluster_fedavg_step(selected_by_cluster)
 
-            if len(updated_states) > 0:
-                global_state = _weighted_average(updated_states, weights)
+            if r % eval_every == 0 or r == total_rounds:
+                center_states, assignments = self._dense_eval_state()
+                metrics = evaluate_cluster_models(
+                    self.clients,
+                    center_states,
+                    assignments,
+                    self.model_fn,
+                    self.num_classes,
+                    split=str(self.cfg.eval.get("test_split", "test")),
+                )
+                extra = self._extra_eval_fields(num_selected=len(selected))
+                extra["updated_clusters"] = updated_clusters
+                self.log_metrics(r, "clustered", metrics, extra=extra)
 
-            self.cluster_states = {0: _clone_state(global_state)}
-            self.clusters = {0: all_client_ids}
+        return self.save_and_summarize()
 
-            metrics = self.evaluate(round_idx=round_idx, phase="warmup")
-            self._log_round(round_idx, "warmup", metrics, updated_clusters=[0])
+    def _fedavg_step(self, state: StateDict, selected: list[int]) -> StateDict:
+        deltas = []
+        weights = []
 
-        self.cluster_states = {0: _clone_state(global_state)}
-        self.clusters = {0: [client.client_id for client in self.clients]}
+        for idx in selected:
+            result = self.clients[idx].train(
+                model_state=state,
+                model_fn=self.model_fn,
+                epochs=int(self.cfg.train.local_epochs),
+                lr=float(self.cfg.train.lr),
+                optimizer_name=str(self.cfg.train.get("optimizer", "sgd")),
+                momentum=float(self.cfg.train.get("momentum", 0.9)),
+                weight_decay=float(self.cfg.train.get("weight_decay", 0.0)),
+                proximal_mu=float(self.cfg.train.get("proximal_mu", 0.0)),
+            )
+            deltas.append(result.delta)
+            weights.append(result.num_samples)
 
-    # ---------------------------------------------------------------------
-    # CFL split
-    # ---------------------------------------------------------------------
+        self.model_downloads += len(selected)
+        self.model_uploads += len(selected)
 
-    def _should_try_split(self, round_idx: int) -> bool:
-        if round_idx < self.min_split_round:
+        if not deltas:
+            return state
+
+        return apply_delta(state, weighted_average_deltas(deltas, weights))
+
+    def _cluster_fedavg_step(self, selected_by_cluster: dict[int, list[int]]) -> list[int]:
+        updated_clusters: list[int] = []
+
+        for cluster_id, selected in selected_by_cluster.items():
+            if not selected:
+                continue
+
+            base_state = self.center_states[cluster_id]
+            deltas = []
+            weights = []
+
+            for idx in selected:
+                result = self.clients[idx].train(
+                    model_state=base_state,
+                    model_fn=self.model_fn,
+                    epochs=int(self.cfg.train.local_epochs),
+                    lr=float(self.cfg.train.lr),
+                    optimizer_name=str(self.cfg.train.get("optimizer", "sgd")),
+                    momentum=float(self.cfg.train.get("momentum", 0.9)),
+                    weight_decay=float(self.cfg.train.get("weight_decay", 0.0)),
+                    proximal_mu=float(self.cfg.train.get("proximal_mu", 0.0)),
+                )
+                deltas.append(result.delta)
+                weights.append(result.num_samples)
+
+            self.model_downloads += len(selected)
+            self.model_uploads += len(selected)
+
+            if deltas:
+                self.center_states[cluster_id] = apply_delta(
+                    base_state,
+                    weighted_average_deltas(deltas, weights),
+                )
+                updated_clusters.append(int(cluster_id))
+
+        return updated_clusters
+
+    def _should_try_split(self, round_idx: int, warmup_rounds: int) -> bool:
+        min_split_round = int(self.cfg.method.get("min_split_round", warmup_rounds + 1))
+        interval = int(self.cfg.method.get("clustering_interval", 1))
+
+        if interval <= 0:
             return False
-        if self.clustering_interval <= 0:
+        if round_idx < min_split_round:
             return False
-        return (round_idx - self.warmup_rounds) % self.clustering_interval == 0
+
+        return (round_idx - warmup_rounds) % interval == 0
+
+    def _maybe_split_all_clusters(self, round_idx: int) -> None:
+        for cluster_id in list(sorted(self.clusters.keys())):
+            if cluster_id in self.clusters:
+                self._maybe_split_cluster(cluster_id, round_idx)
 
     def _maybe_split_cluster(self, cluster_id: int, round_idx: int) -> bool:
-        client_ids = self.clusters[cluster_id]
+        members = list(self.clusters[cluster_id])
+        min_cluster_size = int(self.cfg.method.get("min_cluster_size", 4))
 
-        if len(client_ids) < self.min_cluster_size:
+        if len(members) < 2 * min_cluster_size:
             return False
 
-        base_state = self.cluster_states[cluster_id]
+        base_state = self.center_states[cluster_id]
+        deltas = []
+        weights = []
 
-        # CFL split probe: all clients in this cluster compute updates from the same parent model.
-        _, _, deltas = self._train_clients_from_state(client_ids, base_state)
+        for idx in members:
+            result = self.clients[idx].train(
+                model_state=base_state,
+                model_fn=self.model_fn,
+                epochs=int(self.cfg.method.get("split_probe_epochs", 1)),
+                lr=float(self.cfg.train.lr),
+                optimizer_name=str(self.cfg.train.get("optimizer", "sgd")),
+                momentum=float(self.cfg.train.get("momentum", 0.9)),
+                weight_decay=float(self.cfg.train.get("weight_decay", 0.0)),
+                proximal_mu=float(self.cfg.train.get("proximal_mu", 0.0)),
+            )
+            deltas.append(result.delta)
+            weights.append(result.num_samples)
 
-        self.split_probe_downloads += len(client_ids)
-        self.split_probe_uploads += len(client_ids)
+        self.model_downloads += len(members)
+        self.model_uploads += len(members)
+        self.split_probe_downloads += len(members)
+        self.split_probe_uploads += len(members)
 
-        mean_update = _mean_delta(deltas)
-        mean_norm = _update_norm(mean_update)
-        max_norm = max(_update_norm(d) for d in deltas)
+        mean_delta = weighted_average_deltas(deltas, [1.0 for _ in deltas])
+        mean_norm = _delta_norm(mean_delta)
+        max_norm = max(_delta_norm(delta) for delta in deltas)
 
-        if not (mean_norm < self.eps_1 and max_norm > self.eps_2):
+        eps_1 = float(self.cfg.method.get("eps_1", 0.4))
+        eps_2 = float(self.cfg.method.get("eps_2", 1.6))
+
+        if not (mean_norm < eps_1 and max_norm > eps_2):
             print(
                 f"[cfl] round={round_idx} cluster={cluster_id} no split "
-                f"mean_norm={mean_norm:.4f} max_norm={max_norm:.4f} size={len(client_ids)}"
+                f"size={len(members)} mean_norm={mean_norm:.4f} "
+                f"max_norm={max_norm:.4f}"
             )
             return False
 
-        sim = _cosine_similarity_matrix(deltas)
-        distance = 1.0 - sim
+        linkage = str(self.cfg.method.get("linkage", "complete"))
+        labels = _binary_agglomerative_from_cosine(deltas, linkage=linkage)
 
-        labels = _fit_binary_agglomerative(distance)
+        left = [members[i] for i, label in enumerate(labels) if int(label) == 0]
+        right = [members[i] for i, label in enumerate(labels) if int(label) == 1]
 
-        left = [client_ids[i] for i in range(len(client_ids)) if labels[i] == 0]
-        right = [client_ids[i] for i in range(len(client_ids)) if labels[i] == 1]
-
-        if len(left) == 0 or len(right) == 0:
+        if len(left) < min_cluster_size or len(right) < min_cluster_size:
+            print(
+                f"[cfl] round={round_idx} cluster={cluster_id} rejected split "
+                f"sizes=({len(left)}, {len(right)})"
+            )
             return False
 
-        if len(left) < self.min_cluster_size // 2 or len(right) < self.min_cluster_size // 2:
-            return False
-
-        old_cluster_id = cluster_id
         new_cluster_id = self.next_cluster_id
         self.next_cluster_id += 1
 
-        self.clusters[old_cluster_id] = left
+        self.clusters[cluster_id] = left
         self.clusters[new_cluster_id] = right
 
-        if self.split_center_init == "probe_avg":
-            left_deltas = [deltas[i] for i in range(len(client_ids)) if labels[i] == 0]
-            right_deltas = [deltas[i] for i in range(len(client_ids)) if labels[i] == 1]
+        split_center_init = str(self.cfg.method.get("split_center_init", "parent"))
+        if split_center_init == "probe_avg":
+            left_deltas = [deltas[i] for i, label in enumerate(labels) if int(label) == 0]
+            left_weights = [weights[i] for i, label in enumerate(labels) if int(label) == 0]
+            right_deltas = [deltas[i] for i, label in enumerate(labels) if int(label) == 1]
+            right_weights = [weights[i] for i, label in enumerate(labels) if int(label) == 1]
 
-            self.cluster_states[old_cluster_id] = _add_delta(base_state, _mean_delta(left_deltas))
-            self.cluster_states[new_cluster_id] = _add_delta(base_state, _mean_delta(right_deltas))
+            self.center_states[cluster_id] = apply_delta(
+                base_state,
+                weighted_average_deltas(left_deltas, left_weights),
+            )
+            self.center_states[new_cluster_id] = apply_delta(
+                base_state,
+                weighted_average_deltas(right_deltas, right_weights),
+            )
+        elif split_center_init == "parent":
+            self.center_states[cluster_id] = clone_state(base_state)
+            self.center_states[new_cluster_id] = clone_state(base_state)
         else:
-            self.cluster_states[old_cluster_id] = _clone_state(base_state)
-            self.cluster_states[new_cluster_id] = _clone_state(base_state)
+            raise ValueError(f"unknown CFL split_center_init: {split_center_init}")
 
         self.cluster_split_events += 1
 
         print(
             f"[cfl] round={round_idx} split cluster={cluster_id} "
-            f"-> sizes=({len(left)}, {len(right)}) "
+            f"-> {cluster_id}:{len(left)}, {new_cluster_id}:{len(right)} "
             f"mean_norm={mean_norm:.4f} max_norm={max_norm:.4f}"
         )
 
         return True
 
-    def _maybe_split_all_clusters(self, round_idx: int):
-        if not self._should_try_split(round_idx):
-            return
+    def _group_selected_clients(self, selected: list[int]) -> dict[int, list[int]]:
+        grouped = {cluster_id: [] for cluster_id in self.clusters}
 
-        # freeze ids because splitting mutates self.clusters
-        cluster_ids = list(self.clusters.keys())
+        client_to_cluster = {}
+        for cluster_id, members in self.clusters.items():
+            for idx in members:
+                client_to_cluster[int(idx)] = int(cluster_id)
 
-        for cluster_id in cluster_ids:
-            if cluster_id in self.clusters:
-                self._maybe_split_cluster(cluster_id, round_idx)
+        for idx in selected:
+            grouped[client_to_cluster[int(idx)]].append(int(idx))
 
-    # ---------------------------------------------------------------------
-    # Cluster-wise FedAvg
-    # ---------------------------------------------------------------------
+        return grouped
 
-    def _train_one_cluster(self, cluster_id: int, round_idx: int) -> bool:
-        client_ids = self.clusters[cluster_id]
-        if len(client_ids) == 0:
-            return False
+    def _dense_eval_state(self) -> tuple[list[StateDict], np.ndarray]:
+        cluster_ids = sorted(self.clusters.keys())
+        cluster_to_dense = {cluster_id: pos for pos, cluster_id in enumerate(cluster_ids)}
 
-        selected_ids = self._sample_client_ids(client_ids, round_idx, cluster_id)
-        base_state = self.cluster_states[cluster_id]
+        center_states = [self.center_states[cluster_id] for cluster_id in cluster_ids]
+        assignments = np.zeros(self.num_clients, dtype=np.int64)
 
-        updated_states, weights, _ = self._train_clients_from_state(selected_ids, base_state)
+        for cluster_id, members in self.clusters.items():
+            dense_id = cluster_to_dense[cluster_id]
+            for idx in members:
+                assignments[int(idx)] = int(dense_id)
 
-        self.model_downloads += len(selected_ids)
-        self.model_uploads += len(selected_ids)
+        return center_states, assignments
 
-        if len(updated_states) > 0:
-            self.cluster_states[cluster_id] = _weighted_average(updated_states, weights)
-            return True
+    def _cluster_sizes(self) -> list[int]:
+        return [len(self.clusters[cluster_id]) for cluster_id in sorted(self.clusters.keys())]
 
-        return False
-
-    def _train_clusterwise_round(self, round_idx: int) -> List[int]:
-        updated_clusters = []
-
-        for cluster_id in list(self.clusters.keys()):
-            updated = self._train_one_cluster(cluster_id, round_idx)
-            if updated:
-                updated_clusters.append(cluster_id)
-
-        return updated_clusters
-
-    # ---------------------------------------------------------------------
-    # Evaluation/logging hooks
-    # ---------------------------------------------------------------------
-
-    def _client_assignments(self) -> Dict[int, int]:
-        assignments = {}
-        for cluster_id, client_ids in self.clusters.items():
-            for client_id in client_ids:
-                assignments[int(client_id)] = int(cluster_id)
-        return assignments
-
-    def _cluster_sizes(self) -> List[int]:
-        return [len(v) for _, v in sorted(self.clusters.items(), key=lambda x: x[0])]
-
-    def evaluate(self, round_idx: int, phase: str) -> dict:
-        """
-        This calls the common evaluator expected by the existing benchmark.
-
-        If your BaseMethod already has evaluate_clustered/evaluate_personalized,
-        replace this function body with the same evaluator call used in FeSEM.
-        """
-        assignments = self._client_assignments()
-
-        # Most likely existing helper in your BaseMethod from FeSEM.
-        if hasattr(super(), "evaluate"):
-            return super().evaluate(
-                round_idx=round_idx,
-                phase=phase,
-                assignments=assignments,
-                center_states=self.cluster_states,
-            )
-
-        raise RuntimeError(
-            "CFLRunner.evaluate needs to be wired to the same evaluation helper used by FeSEM. "
-            "Copy FeSEMRunner's evaluation call here and pass assignments + cluster_states."
-        )
-
-    def _log_round(self, round_idx: int, phase: str, metrics: dict, updated_clusters: List[int]):
-        assignments = self._client_assignments()
-        cluster_sizes = self._cluster_sizes()
-
-        row = dict(metrics)
-        row.update(
-            {
-                "method": "cfl",
-                "round": round_idx,
-                "phase": phase,
-                "k_config": None,
-                "k_pred": len([s for s in cluster_sizes if s > 0]),
-                "cluster_sizes": cluster_sizes,
-                "num_empty_clusters": sum(1 for s in cluster_sizes if s == 0),
-                "model_downloads": self.model_downloads,
-                "model_uploads": self.model_uploads,
-                "split_probe_downloads": self.split_probe_downloads,
-                "split_probe_uploads": self.split_probe_uploads,
-                "model_transmissions": (
-                    self.model_downloads
-                    + self.model_uploads
-                    + self.split_probe_downloads
-                    + self.split_probe_uploads
-                ),
-                "cluster_split_events": self.cluster_split_events,
-                "eps_1": self.eps_1,
-                "eps_2": self.eps_2,
-                "updated_clusters": updated_clusters,
-                "assignment_interval": self.clustering_interval,
-            }
-        )
-
-        self.logger.log_round(row)
-
-        print(
-            f"[eval] round={round_idx} phase={phase} "
-            f"client_avg_acc={row.get('client_avg_acc', float('nan')):.4f} "
-            f"micro_acc={row.get('micro_acc', float('nan')):.4f} "
-            f"k_pred={row['k_pred']}"
-        )
-
-    # ---------------------------------------------------------------------
-    # Main entry
-    # ---------------------------------------------------------------------
-
-    def run(self):
-        start = time.time()
-
-        self._fedavg_warmup()
-
-        for round_idx in range(self.warmup_rounds + 1, self.total_rounds + 1):
-            self._maybe_split_all_clusters(round_idx)
-
-            updated_clusters = self._train_clusterwise_round(round_idx)
-
-            metrics = self.evaluate(round_idx=round_idx, phase="clustered")
-            self._log_round(round_idx, "clustered", metrics, updated_clusters)
-
-        final_summary = self.logger.rows[-1].copy()
-        final_summary["runtime_sec"] = time.time() - start
-
-        output_path = self.logger.save(final_summary)
-        final_summary["output_path"] = output_path
-
-        return final_summary
+    def _extra_eval_fields(self, num_selected: int) -> dict:
+        return {
+            "k_config": None,
+            "num_selected_clients": int(num_selected),
+            "cluster_sizes": self._cluster_sizes(),
+            "num_empty_clusters": 0,
+            "cluster_split_events": int(self.cluster_split_events),
+            "split_probe_downloads": int(self.split_probe_downloads),
+            "split_probe_uploads": int(self.split_probe_uploads),
+            "eps_1": float(self.cfg.method.get("eps_1", 0.4)),
+            "eps_2": float(self.cfg.method.get("eps_2", 1.6)),
+            "clustering_interval": int(self.cfg.method.get("clustering_interval", 1)),
+            "min_cluster_size": int(self.cfg.method.get("min_cluster_size", 4)),
+            "split_center_init": str(self.cfg.method.get("split_center_init", "parent")),
+        }

@@ -1,4 +1,5 @@
 """Method registry."""
+
 from __future__ import annotations
 
 from flbench.methods.fedavg import FedAvgRunner
@@ -8,8 +9,7 @@ from flbench.methods.cfl import CFLRunner
 RUNNERS = {
     FedAvgRunner.name: FedAvgRunner,
     FeSEMRunner.name: FeSEMRunner,
-    "cfl": CFLRunner,
-
+    CFLRunner.name: CFLRunner,
 }
 
 
