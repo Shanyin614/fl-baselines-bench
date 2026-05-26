@@ -6,9 +6,9 @@ from typing import Callable, Mapping
 import numpy as np
 from torch import nn
 
-from flbench.core.client import FLClient
-from flbench.core.metrics import classification_summary, clustering_summary
-from flbench.utils.state_dict import StateDict
+from src.flbench.core.client import FLClient
+from src.flbench.core.metrics import classification_summary, clustering_summary
+from src.flbench.utils.state_dict import StateDict
 
 
 def evaluate_global_model(

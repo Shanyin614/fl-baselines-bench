@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from flbench.core.types import ClientMeta
+from src.flbench.core.types import ClientMeta
 
 
 def save_client_metas(metas: list[ClientMeta], path: str | Path, metadata: dict | None = None) -> Path:

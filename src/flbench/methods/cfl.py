@@ -6,10 +6,10 @@ import numpy as np
 import torch
 from sklearn.cluster import AgglomerativeClustering
 
-from flbench.core.evaluation import evaluate_cluster_models, evaluate_global_model
-from flbench.core.sampling import sample_client_ids
-from flbench.methods.base import BaseRunner
-from flbench.utils.state_dict import (
+from src.flbench.core.evaluation import evaluate_cluster_models, evaluate_global_model
+from src.flbench.core.sampling import sample_client_ids
+from src.flbench.methods.base import BaseRunner
+from src.flbench.utils.state_dict import (
     StateDict,
     apply_delta,
     clone_state,

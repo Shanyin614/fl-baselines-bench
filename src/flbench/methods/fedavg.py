@@ -1,10 +1,10 @@
 """FedAvg baseline."""
 from __future__ import annotations
 
-from flbench.core.evaluation import evaluate_global_model
-from flbench.core.sampling import sample_client_ids
-from flbench.methods.base import BaseRunner
-from flbench.utils.state_dict import apply_delta, weighted_average_deltas
+from src.flbench.core.evaluation import evaluate_global_model
+from src.flbench.core.sampling import sample_client_ids
+from src.flbench.methods.base import BaseRunner
+from src.flbench.utils.state_dict import apply_delta, weighted_average_deltas
 
 
 class FedAvgRunner(BaseRunner):

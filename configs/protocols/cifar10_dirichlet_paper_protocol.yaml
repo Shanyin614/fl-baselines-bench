@@ -1,0 +1,62 @@
+protocol:
+  name: cifar10_dirichlet_paper_protocol_v1
+
+runtime:
+  seed: 42
+  device: auto
+
+output:
+  dir: outputs/csv
+  name: results.csv
+  save_round_metrics: true
+
+dataset:
+  name: cifar10
+  data_root: data
+  split_dir: splits/cifar10
+  split_file: null
+
+  num_classes: 10
+  num_clients: 100
+
+  partition: dirichlet
+  num_true_clusters: 10
+  dir_alpha_inter: 0.1
+  dir_alpha_intra: 10.0
+
+  train_samples_per_client: 500
+  test_samples_per_client: 100
+  val_ratio: 0.1
+  num_workers: 0
+
+model:
+  name: small_cnn
+  num_classes: 10
+  input_channels: 3
+  image_size: 32
+
+train:
+  total_rounds: 200
+  warmup_rounds: 5
+  client_frac: 0.2
+  local_epochs: 2
+  batch_size: 32
+  optimizer: sgd
+  lr: 0.005
+  momentum: 0.9
+  weight_decay: 0.0
+  proximal_mu: 0.0
+
+eval:
+  eval_every: 10
+  assignment_split: val
+  test_split: test
+  metrics:
+    - client_avg_acc
+    - micro_acc
+    - global_macro_f1
+    - worst_client_acc
+    - acc_std
+    - ari
+    - nmi
+    - purity

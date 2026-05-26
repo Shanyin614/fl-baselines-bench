@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from flbench.methods.fedavg import FedAvgRunner
-from flbench.methods.fesem import FeSEMRunner
-from flbench.methods.cfl import CFLRunner
+from src.flbench.methods.fedavg import FedAvgRunner
+from src.flbench.methods.fesem import FeSEMRunner
+from src.flbench.methods.cfl import CFLRunner
 
 RUNNERS = {
     FedAvgRunner.name: FedAvgRunner,

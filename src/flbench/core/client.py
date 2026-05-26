@@ -10,8 +10,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, Subset
 
-from flbench.core.types import ClientMeta
-from flbench.utils.state_dict import StateDict, clone_state, state_delta
+from src.flbench.core.types import ClientMeta
+from src.flbench.utils.state_dict import StateDict, clone_state, state_delta
 
 SplitName = Literal["train", "val", "test"]
 
