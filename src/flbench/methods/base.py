@@ -76,18 +76,36 @@ class BaseRunner:
     def log_metrics(self, round_idx: int, phase: str, metrics: dict, extra: dict | None = None) -> None:
         row = self._base_row(round_idx=round_idx, phase=phase)
         row.update(metrics)
+
+        # Plot-friendly aliases.
+        # acc/f1 use global sample-level metrics by default.
+        if "micro_acc" in metrics:
+            row["acc"] = float(metrics["micro_acc"])
+        elif "client_avg_acc" in metrics:
+            row["acc"] = float(metrics["client_avg_acc"])
+
+        if "global_macro_f1" in metrics:
+            row["f1"] = float(metrics["global_macro_f1"])
+        elif "client_avg_macro_f1" in metrics:
+            row["f1"] = float(metrics["client_avg_macro_f1"])
+
         if extra:
             row.update(extra)
+
         self.logger.log(row)
+
         important = [
             f"round={round_idx}",
             f"phase={phase}",
-            f"client_avg_acc={metrics.get('client_avg_acc', float('nan')):.4f}",
-            f"micro_acc={metrics.get('micro_acc', float('nan')):.4f}",
+            f"acc={float(row.get('acc', float('nan'))):.4f}",
+            f"f1={float(row.get('f1', float('nan'))):.4f}",
+            f"client_avg_acc={float(row.get('client_avg_acc', float('nan'))):.4f}",
+            f"micro_acc={float(row.get('micro_acc', float('nan'))):.4f}",
         ]
         if "k_pred" in metrics:
             important.append(f"k_pred={int(metrics['k_pred'])}")
         print("[eval] " + " ".join(important))
+
 
     def save_and_summarize(self) -> dict:
         path = self.logger.save()

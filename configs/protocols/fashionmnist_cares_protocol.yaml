@@ -34,7 +34,7 @@ model:
   num_classes: 10
 
 train:
-  total_rounds: 30
+  total_rounds: 100
   warmup_rounds: 5
   client_frac: 0.2
   local_epochs: 1

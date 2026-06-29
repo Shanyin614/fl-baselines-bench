@@ -56,7 +56,7 @@ def main() -> None:
     device = get_device(str(cfg.runtime.get("device", "auto")))
 
     clients, dataset_info = build_clients(cfg, device=device)
-    model_fn = build_model_fn(cfg)
+    model_fn = build_model_fn(cfg, dataset_info=dataset_info)
     runner = build_runner(
         method_name=str(cfg.method.name),
         clients=clients,

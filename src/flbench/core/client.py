@@ -38,7 +38,7 @@ class FLClient:
     ) -> None:
         self.id = int(meta.client_id)
         self.group_id = None if meta.group_id is None else int(meta.group_id)
-        self.device = device
+        self.device = device if device is not None else torch.device("cpu")
         self.batch_size = int(batch_size)
         self.num_workers = int(num_workers)
         self.train_set = Subset(train_dataset, list(meta.train_indices))

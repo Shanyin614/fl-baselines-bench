@@ -1,4 +1,4 @@
-protocol:
+﻿protocol:
   name: fashionmnist_dirichlet_protocol_v1
 
 runtime:
@@ -20,11 +20,11 @@ dataset:
   num_clients: 100
 
   partition: dirichlet
-  num_true_clusters: 10
+  num_true_clusters: 4
   dir_alpha_inter: 0.1
   dir_alpha_intra: 10.0
 
-  # only used if partition: label_group/manual
+  # Only used if partition: label_group/manual; ignored by dirichlet partition.
   major_ratio: 0.85
   true_groups:
     - [0, 2, 6]
@@ -42,13 +42,13 @@ model:
   num_classes: 10
 
 train:
-  total_rounds: 30
+  total_rounds: 100
   warmup_rounds: 5
   client_frac: 0.2
-  local_epochs: 1
+  local_epochs: 2
   batch_size: 64
   optimizer: sgd
-  lr: 0.02
+  lr: 0.01
   momentum: 0.9
   weight_decay: 0.0
   proximal_mu: 0.0

@@ -58,7 +58,25 @@ done
 Recommended first-stage baselines:
 
 - FedAvg
-- IFCA (to be added or imported from your existing implementation)
+- IFCA
 - FeSEM
 - Oracle-Cluster FedAvg (to be added)
 - CFL (to be added)
+
+## CICIDS2017 / UNSW_NB15 runs
+
+Use one of the new protocol files with any of the existing method configs:
+
+```bash
+python run.py \
+  --protocol configs/protocols/cicids2017_cares_protocol.yaml \
+  --method-config configs/methods/fedavg.yaml \
+  --seed 42
+```
+
+```bash
+python run.py \
+  --protocol configs/protocols/unsw_nb15_cares_protocol.yaml \
+  --method-config configs/methods/ifca.yaml \
+  --seed 42
+```
