@@ -1,0 +1,59 @@
+protocol:
+  name: cicids2017_cares_protocol_v1
+
+runtime:
+  seed: 42
+  device: auto
+
+output:
+  dir: outputs/csv
+  name: results.csv
+  save_round_metrics: true
+
+dataset:
+  name: cicids2017
+  data_root: data
+  data_file: cicids2017/processed/cicids2017_binary_train.csv
+  split_dir: splits/cicids2017
+  split_file: null
+  label_column: label
+  feature_columns: null
+  num_classes: 2
+  num_clients: 100
+  partition: manual
+  major_ratio: 0.85
+  train_samples_per_client: 400
+  test_samples_per_client: 100
+  val_ratio: 0.2
+  num_workers: 0
+  test_ratio: 0.2
+
+model:
+  name: mlp
+  num_classes: 2
+
+train:
+  total_rounds: 50
+  warmup_rounds: 5
+  client_frac: 0.2
+  local_epochs: 2
+  batch_size: 64
+  optimizer: sgd
+  lr: 0.01
+  momentum: 0.9
+  weight_decay: 0.0
+  proximal_mu: 0.0
+
+eval:
+  eval_every: 1
+  assignment_split: val
+  test_split: test
+  metrics:
+    - client_avg_acc
+    - micro_acc
+    - global_macro_f1
+    - worst_client_acc
+    - acc_std
+    - ari
+    - nmi
+    - purity

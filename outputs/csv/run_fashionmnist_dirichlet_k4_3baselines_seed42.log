@@ -1,0 +1,62 @@
+﻿**********************
+Windows PowerShell 脚本开始
+开始时间: 20260527164744
+用户名: DESKTOP-CMSHL1S\shanyin
+RunAs 用户: DESKTOP-CMSHL1S\shanyin
+配置名称: 
+计算机: DESKTOP-CMSHL1S (Microsoft Windows NT 10.0.26200.0)
+主机应用程序: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -File .\run_fashionmnist_dirichlet_k4_3baselines.ps1
+进程 ID: 133216
+PSVersion: 5.1.26100.8115
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.8115
+BuildVersion: 10.0.26100.8115
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Protocol: configs/protocols/fashionmnist_dirichlet_protocol.yaml
+Tag: fashionmnist_dirichlet_k4
+Seed: 42
+Device: cpu
+K: 4
+Running FedAvg on FashionMNIST-Dirichlet-K4...
+  k_config: 1
+  model_downloads: 2000
+  model_uploads: 2000
+  assignment_model_evals: 0
+  model_transmissions: 4000
+  runtime_sec: 614.5096943378448
+  split_file: splits\fashionmnist\dirichlet_k4_ainter0.1_aintra10_clients100_seed42.json
+  client_avg_loss: 0.503055211186409
+  sample_avg_loss: 0.503055211186409
+  client_avg_acc: 0.7917000000000001
+  micro_acc: 0.7917
+  global_macro_f1: 0.5362402245287179
+  client_avg_macro_f1: 0.2312518706453406
+  worst_client_acc: 0.47
+  best_client_acc: 0.98
+  acc_std: 0.12307765841126488
+  num_eval_samples: 10000.0
+  ari: 0.0
+  nmi: 0.0
+  purity: 0.25
+  k_pred: 1.0
+  acc: 0.7917
+  f1: 0.5362402245287179
+  num_selected_clients: 20
+  output_path: outputs\csv\fedavg_fashionmnist_dirichlet_k4_seed42.csv
+Running FeSEM-K4 on FashionMNIST-Dirichlet-K4...
+
+Running IFCA-K4 no warmup on FashionMNIST-Dirichlet-K4...
+
+Checking outputs...
+
+Done.
+Outputs saved under outputs/csv
+Log saved to outputs/csv/run_fashionmnist_dirichlet_k4_3baselines_seed42.log
+**********************
+Windows PowerShell 脚本结束
+结束时间: 20260527210135
+**********************

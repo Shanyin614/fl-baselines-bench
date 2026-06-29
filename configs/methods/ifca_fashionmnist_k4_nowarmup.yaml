@@ -1,0 +1,8 @@
+﻿method:
+  name: ifca
+  num_clusters: 4
+  warmup_rounds: 0
+  init: random_perturb
+  center_perturb_sigma: 0.01
+  assignment_split: val
+  eval_assign_all: true
