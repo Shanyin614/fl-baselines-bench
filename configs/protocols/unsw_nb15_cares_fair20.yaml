@@ -1,0 +1,71 @@
+﻿protocol:
+  name: unsw_nb15_cares_fair20_v1
+
+runtime:
+  seed: 42
+  device: auto
+
+output:
+  dir: outputs/paper_baselines_unsw
+  name: results.csv
+  save_round_metrics: true
+
+dataset:
+  name: unsw_nb15
+  data_root: data
+  data_file: unsw/UNSW_NB15_training-set.csv
+  test_file: unsw/UNSW_NB15_testing-set.csv
+  label_column: label
+  feature_columns: null
+  drop_columns:
+    - id
+    - attack_cat
+  auto_drop_if_contains:
+    - attack_cat
+  num_classes: 2
+
+  num_clients: 20
+  partition: dirichlet
+  num_true_clusters: 2
+  dir_alpha_inter: 0.1
+  dir_alpha_intra: 10.0
+
+  train_samples_per_client: 2000
+  test_samples_per_client: 500
+  val_ratio: 0.2
+  test_ratio: 0.2
+
+  split_dir: splits/unsw_nb15_fair20
+  split_file: null
+  num_workers: 0
+
+model:
+  name: mlp
+  num_classes: 2
+
+train:
+  total_rounds: 50
+  warmup_rounds: 5
+  client_frac: 0.5
+  local_epochs: 2
+  batch_size: 64
+  optimizer: sgd
+  lr: 0.01
+  momentum: 0.9
+  weight_decay: 0.0
+  proximal_mu: 0.0
+
+eval:
+  eval_every: 1
+  assignment_split: val
+  test_split: test
+  metrics:
+    - client_avg_acc
+    - micro_acc
+    - global_macro_f1
+    - client_avg_macro_f1
+    - worst_client_acc
+    - acc_std
+    - ari
+    - nmi
+    - purity

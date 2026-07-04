@@ -1,0 +1,8 @@
+method:
+  name: cfl
+  warmup_rounds: 5
+  clustering_interval: 5
+  eps1: 0.4
+  eps2: 1.6
+  min_cluster_size: 2
+  linkage: complete

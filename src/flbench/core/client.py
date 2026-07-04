@@ -1,4 +1,4 @@
-"""Federated client abstraction shared by all baselines."""
+﻿"""Federated client abstraction shared by all baselines."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -10,8 +10,8 @@ import torch.nn.functional as F
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, Subset
 
-from src.flbench.core.types import ClientMeta
-from src.flbench.utils.state_dict import StateDict, clone_state, state_delta
+from flbench.core.types import ClientMeta
+from flbench.utils.state_dict import StateDict, clone_state, state_delta
 
 SplitName = Literal["train", "val", "test"]
 
@@ -183,3 +183,4 @@ class FLClient:
             "y_true": y_true_np,
             "y_pred": y_pred_np,
         }
+

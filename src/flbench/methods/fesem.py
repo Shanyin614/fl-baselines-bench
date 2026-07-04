@@ -1,4 +1,4 @@
-"""FeSEM / fixed-K multi-center federated learning baseline."""
+﻿"""FeSEM / fixed-K multi-center federated learning baseline."""
 from __future__ import annotations
 
 from collections import Counter
@@ -7,10 +7,10 @@ from typing import Literal
 import numpy as np
 from sklearn.cluster import KMeans
 
-from src.flbench.core.evaluation import evaluate_cluster_models, evaluate_global_model
-from src.flbench.core.sampling import sample_client_ids
-from src.flbench.methods.base import BaseRunner
-from src.flbench.utils.state_dict import (
+from flbench.core.evaluation import evaluate_cluster_models, evaluate_global_model
+from flbench.core.sampling import sample_client_ids
+from flbench.methods.base import BaseRunner
+from flbench.utils.state_dict import (
     StateDict,
     apply_delta,
     flatten_delta,
@@ -291,3 +291,4 @@ class FeSEMRunner(BaseRunner):
             "assignment_interval": int(self.cfg.method.get("assignment_interval", 1)),
             "center_init": str(self.cfg.method.get("init", "random_perturb")),
         }
+

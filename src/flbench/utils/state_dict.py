@@ -1,4 +1,4 @@
-"""Utilities for PyTorch state_dict arithmetic."""
+﻿"""Utilities for PyTorch state_dict arithmetic."""
 from __future__ import annotations
 
 import copy
@@ -70,3 +70,4 @@ def flatten_delta(delta: Mapping[str, torch.Tensor]) -> torch.Tensor:
     if not parts:
         return torch.empty(0)
     return torch.cat(parts)
+

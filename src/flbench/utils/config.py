@@ -1,4 +1,4 @@
-"""Minimal YAML config helpers."""
+﻿"""Minimal YAML config helpers."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -65,3 +65,4 @@ def deep_update(base: Mapping[str, Any], override: Mapping[str, Any]) -> dict[st
         else:
             result[key] = deepcopy(value)
     return result
+

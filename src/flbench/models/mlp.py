@@ -1,4 +1,4 @@
-"""Simple MLP model for tabular datasets."""
+﻿"""Simple MLP model for tabular datasets."""
 
 from __future__ import annotations
 
@@ -16,3 +16,4 @@ class MLP(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+

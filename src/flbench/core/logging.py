@@ -1,4 +1,4 @@
-"""CSV logging."""
+﻿"""CSV logging."""
 from __future__ import annotations
 
 import csv
@@ -37,3 +37,4 @@ class CSVLogger:
             writer.writeheader()
             writer.writerows(self.rows)
         return self.path
+

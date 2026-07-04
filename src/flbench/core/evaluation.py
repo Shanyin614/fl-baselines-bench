@@ -1,4 +1,4 @@
-"""Evaluation routines shared by methods."""
+﻿"""Evaluation routines shared by methods."""
 from __future__ import annotations
 
 from typing import Callable, Mapping
@@ -6,9 +6,9 @@ from typing import Callable, Mapping
 import numpy as np
 from torch import nn
 
-from src.flbench.core.client import FLClient
-from src.flbench.core.metrics import classification_summary, clustering_summary
-from src.flbench.utils.state_dict import StateDict
+from flbench.core.client import FLClient
+from flbench.core.metrics import classification_summary, clustering_summary
+from flbench.utils.state_dict import StateDict
 
 
 def evaluate_global_model(
@@ -45,3 +45,4 @@ def evaluate_cluster_models(
     metrics.update(clustering_summary(true_groups, assignments_arr.tolist()))
     metrics["k_pred"] = float(len(np.unique(assignments_arr)))
     return metrics
+

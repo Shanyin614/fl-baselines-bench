@@ -1,4 +1,4 @@
-"""FashionMNIST dataset builder."""
+﻿"""FashionMNIST dataset builder."""
 
 from __future__ import annotations
 
@@ -176,3 +176,4 @@ def build_fashionmnist_clients(cfg, device: torch.device) -> tuple[list[FLClient
             "dir_alpha_intra": float(cfg.dataset.get("dir_alpha_intra", 10.0)),
         },
     )
+

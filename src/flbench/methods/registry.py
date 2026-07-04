@@ -1,4 +1,4 @@
-"""Method registry."""
+﻿"""Method registry."""
 
 from __future__ import annotations
 
@@ -39,3 +39,4 @@ def build_runner(method_name: str, *args, **kwargs):
         raise ValueError(f"unsupported method: {method_name}. Available: {available}")
 
     return RUNNERS[name](*args, **kwargs)
+

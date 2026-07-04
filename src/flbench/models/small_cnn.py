@@ -1,4 +1,4 @@
-"""SmallCNN aligned with CARES-lite experiments."""
+﻿"""SmallCNN aligned with CARES-lite experiments."""
 
 from __future__ import annotations
 
@@ -38,3 +38,4 @@ class SmallCNN(nn.Module):
     def forward(self, x):
         x = self.features(x)
         return self.classifier(x.flatten(1))
+

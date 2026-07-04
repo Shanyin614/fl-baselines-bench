@@ -1,4 +1,4 @@
-"""Reproducibility and device helpers."""
+﻿"""Reproducibility and device helpers."""
 from __future__ import annotations
 
 import os
@@ -26,3 +26,4 @@ def get_device(name: str = "auto") -> torch.device:
         print("[warning] CUDA requested but unavailable; falling back to CPU")
         return torch.device("cpu")
     return torch.device(name)
+

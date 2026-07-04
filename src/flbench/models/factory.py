@@ -1,4 +1,4 @@
-"""Model factory."""
+﻿"""Model factory."""
 
 from __future__ import annotations
 
@@ -35,3 +35,4 @@ def build_model_fn(cfg, dataset_info=None) -> Callable[[], nn.Module]:
         return lambda: MLP(num_classes=num_classes, input_dim=input_dim)
 
     raise ValueError(f"unsupported model: {cfg.model.name}")
+

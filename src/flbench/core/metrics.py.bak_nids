@@ -1,17 +1,11 @@
-﻿"""Metric helpers for FL evaluation."""
+"""Metric helpers for FL evaluation."""
 from __future__ import annotations
 
 from collections import Counter
 from typing import Iterable
 
 import numpy as np
-from sklearn.metrics import (
-    adjusted_rand_score,
-    confusion_matrix,
-    f1_score,
-    normalized_mutual_info_score,
-    precision_recall_fscore_support,
-)
+from sklearn.metrics import adjusted_rand_score, f1_score, normalized_mutual_info_score
 
 
 def purity_score(y_true: Iterable[int], y_pred: Iterable[int]) -> float:
@@ -30,58 +24,24 @@ def purity_score(y_true: Iterable[int], y_pred: Iterable[int]) -> float:
 def classification_summary(client_results: list[dict[str, object]], num_classes: int) -> dict[str, float]:
     if not client_results:
         return {}
-
     accs = np.asarray([float(r["acc"]) for r in client_results], dtype=np.float64)
     losses = np.asarray([float(r["loss"]) for r in client_results], dtype=np.float64)
     ns = np.asarray([int(r["num_samples"]) for r in client_results], dtype=np.int64)
     y_true = np.concatenate([r["y_true"] for r in client_results]) if client_results else np.asarray([], dtype=int)
     y_pred = np.concatenate([r["y_pred"] for r in client_results]) if client_results else np.asarray([], dtype=int)
-
     total_correct = int((y_true == y_pred).sum()) if y_true.size else 0
     total_n = int(y_true.size)
     labels = list(range(int(num_classes)))
-    micro_acc = float(total_correct / max(total_n, 1))
-
-    if int(num_classes) == 2:
-        precision, recall, f1, _ = precision_recall_fscore_support(
-            y_true,
-            y_pred,
-            average="binary",
-            pos_label=1,
-            zero_division=0,
-        )
-        cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
-        tn, fp, fn, tp = [int(x) for x in cm.ravel()]
-    else:
-        precision, recall, f1, _ = precision_recall_fscore_support(
-            y_true,
-            y_pred,
-            average="macro",
-            labels=labels,
-            zero_division=0,
-        )
-        tn = fp = fn = tp = 0
-
     return {
         "client_avg_loss": float(np.mean(losses)),
         "sample_avg_loss": float(np.average(losses, weights=np.maximum(ns, 1))),
-        "acc": micro_acc,
         "client_avg_acc": float(np.mean(accs)),
-        "micro_acc": micro_acc,
-        "precision": float(precision),
-        "recall": float(recall),
-        "f1": float(f1),
-        "tn": float(tn),
-        "fp": float(fp),
-        "fn": float(fn),
-        "tp": float(tp),
+        "micro_acc": float(total_correct / max(total_n, 1)),
         "global_macro_f1": float(f1_score(y_true, y_pred, average="macro", labels=labels, zero_division=0)),
-        "client_avg_macro_f1": float(
-            np.mean([
-                f1_score(r["y_true"], r["y_pred"], average="macro", labels=labels, zero_division=0)
-                for r in client_results
-            ])
-        ),
+        "client_avg_macro_f1": float(np.mean([
+            f1_score(r["y_true"], r["y_pred"], average="macro", labels=labels, zero_division=0)
+            for r in client_results
+        ])),
         "worst_client_acc": float(np.min(accs)),
         "best_client_acc": float(np.max(accs)),
         "acc_std": float(np.std(accs)),
@@ -100,4 +60,3 @@ def clustering_summary(true_groups: list[int | None], assignments: list[int] | n
         "nmi": float(normalized_mutual_info_score(y_true, y_pred)),
         "purity": float(purity_score(y_true, y_pred)),
     }
-

@@ -1,0 +1,10 @@
+method:
+  name: ifca
+  num_clusters: 2
+  warmup_rounds: 5
+  init:
+    mode: random_perturb
+    noise_std: 0.01
+  assignment_split: val
+  assignment_interval: 1
+  min_cluster_size: 1

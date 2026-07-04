@@ -1,10 +1,10 @@
-"""FedAvg baseline."""
+﻿"""FedAvg baseline."""
 from __future__ import annotations
 
-from src.flbench.core.evaluation import evaluate_global_model
-from src.flbench.core.sampling import sample_client_ids
-from src.flbench.methods.base import BaseRunner
-from src.flbench.utils.state_dict import apply_delta, weighted_average_deltas
+from flbench.core.evaluation import evaluate_global_model
+from flbench.core.sampling import sample_client_ids
+from flbench.methods.base import BaseRunner
+from flbench.utils.state_dict import apply_delta, weighted_average_deltas
 
 
 class FedAvgRunner(BaseRunner):
@@ -46,3 +46,4 @@ class FedAvgRunner(BaseRunner):
                 )
                 self.log_metrics(r, "train", metrics, extra={"num_selected_clients": len(selected)})
         return self.save_and_summarize()
+

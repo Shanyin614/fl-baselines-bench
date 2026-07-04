@@ -1,4 +1,4 @@
-"""Shared dataclasses."""
+﻿"""Shared dataclasses."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -21,3 +21,4 @@ class DatasetInfo:
     split_file: str | None
     true_groups: list[list[int]]
     extra: dict[str, Any] = field(default_factory=dict)
+

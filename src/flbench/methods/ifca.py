@@ -1,4 +1,4 @@
-"""IFCA baseline.
+﻿"""IFCA baseline.
 
 Iterative Federated Clustering Algorithm:
   1. Keep K cluster models.
@@ -364,3 +364,4 @@ class IFCARunner(BaseRunner):
             "center_init": str(self.cfg.method.get("init", "random_perturb")),
             "eval_assign_all": bool(self.cfg.method.get("eval_assign_all", True)),
         }
+

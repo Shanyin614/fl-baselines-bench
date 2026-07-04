@@ -1,4 +1,4 @@
-"""CFL / clustered federated learning baseline."""
+﻿"""CFL / clustered federated learning baseline."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import numpy as np
 import torch
 from sklearn.cluster import AgglomerativeClustering
 
-from src.flbench.core.evaluation import evaluate_cluster_models, evaluate_global_model
-from src.flbench.core.sampling import sample_client_ids
-from src.flbench.methods.base import BaseRunner
-from src.flbench.utils.state_dict import (
+from flbench.core.evaluation import evaluate_cluster_models, evaluate_global_model
+from flbench.core.sampling import sample_client_ids
+from flbench.methods.base import BaseRunner
+from flbench.utils.state_dict import (
     StateDict,
     apply_delta,
     clone_state,
@@ -382,3 +382,4 @@ class CFLRunner(BaseRunner):
             "min_cluster_size": int(self.cfg.method.get("min_cluster_size", 4)),
             "split_center_init": str(self.cfg.method.get("split_center_init", "parent")),
         }
+

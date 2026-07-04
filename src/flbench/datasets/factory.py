@@ -1,4 +1,4 @@
-"""Dataset factory."""
+﻿"""Dataset factory."""
 
 from __future__ import annotations
 
@@ -29,3 +29,4 @@ def build_clients(cfg, device: torch.device):
         return build_tabular_clients(cfg, device=device)
 
     raise ValueError(f"unsupported dataset: {cfg.dataset.name}")
+

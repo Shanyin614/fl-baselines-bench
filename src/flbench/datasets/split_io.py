@@ -1,10 +1,10 @@
-"""Split file IO."""
+﻿"""Split file IO."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from src.flbench.core.types import ClientMeta
+from flbench.core.types import ClientMeta
 
 
 def save_client_metas(metas: list[ClientMeta], path: str | Path, metadata: dict | None = None) -> Path:
@@ -44,3 +44,4 @@ def load_client_metas(path: str | Path) -> list[ClientMeta]:
             )
         )
     return metas
+

@@ -1,4 +1,4 @@
-"""CARES-compatible FashionMNIST client partitions."""
+﻿"""CARES-compatible FashionMNIST client partitions."""
 
 from __future__ import annotations
 
@@ -211,3 +211,4 @@ def build_dirichlet_client_metas(
     ]
 
     return metas, true_groups
+

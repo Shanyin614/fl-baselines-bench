@@ -1,4 +1,4 @@
-"""Base runner class."""
+﻿"""Base runner class."""
 from __future__ import annotations
 
 import time
@@ -9,10 +9,10 @@ import numpy as np
 import torch
 from torch import nn
 
-from src.flbench.core.client import FLClient
-from src.flbench.core.logging import CSVLogger
-from src.flbench.core.types import DatasetInfo
-from src.flbench.utils.state_dict import StateDict, clone_state
+from flbench.core.client import FLClient
+from flbench.core.logging import CSVLogger
+from flbench.core.types import DatasetInfo
+from flbench.utils.state_dict import StateDict, clone_state
 
 
 class BaseRunner:
@@ -84,10 +84,11 @@ class BaseRunner:
         elif "client_avg_acc" in metrics:
             row["acc"] = float(metrics["client_avg_acc"])
 
-        if "global_macro_f1" in metrics:
-            row["f1"] = float(metrics["global_macro_f1"])
-        elif "client_avg_macro_f1" in metrics:
-            row["f1"] = float(metrics["client_avg_macro_f1"])
+        if "f1" not in row:
+            if "global_macro_f1" in metrics:
+                row["f1"] = float(metrics["global_macro_f1"])
+            elif "client_avg_macro_f1" in metrics:
+                row["f1"] = float(metrics["client_avg_macro_f1"])
 
         if extra:
             row.update(extra)
@@ -118,3 +119,4 @@ class BaseRunner:
 
     def run(self) -> dict:
         raise NotImplementedError
+

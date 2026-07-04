@@ -1,4 +1,4 @@
-"""CIFAR-10 dataset builder."""
+﻿"""CIFAR-10 dataset builder."""
 
 from __future__ import annotations
 
@@ -145,3 +145,4 @@ def build_cifar10_clients(cfg, device: torch.device) -> tuple[list[FLClient], Da
             "image_size": 32,
         },
     )
+
